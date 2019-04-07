@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+
+import gtk
+import socket
+
+
+def scrollbox(data=None):
+    window = gtk.Window()
+    window.set_title("")
+    window.set_size_request(260, 300)
+    mainbox = gtk.VBox()
+    window.add(mainbox)
+    textview = gtk.TextView()
+    textbuffer = textview.get_buffer()
+    textbuffer.set_text(data)
+    mainbox.pack_start(textview)
+    textview.show()
+    b = gtk.Button("Close")
+    mainbox.pack_start(b, expand=False)
+    b.connect("clicked", lambda x: window.destroy())
+    b.show()
+    mainbox.show()
+    window.show_all()
+
+
+def message(data=None):
+    msg = gtk.MessageDialog(None, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO,
+                            gtk.BUTTONS_OK, data)
+    msg.run()
+    msg.destroy()
+
+
+def open_app(data=None):
+    message(data)
+
+
+def close_app(data=None):
+    gtk.main_quit()
+
+
+def make_menu(event_button, event_time, data=None):
+    menu = gtk.Menu()
+    open_item = gtk.MenuItem("[%s] VPN Reconnect" % socket.gethostname())
+    close_item = gtk.MenuItem("[%s] Close watcher" % socket.gethostname())
+
+    menu.append(open_item)
+    menu.append(close_item)
+    open_item.connect_object("activate", open_app, "Open App")
+    close_item.connect_object("activate", close_app, "")
+    open_item.show()
+    close_item.show()
+
+    menu.popup(None, None, None, event_button, event_time)
+
+
+def on_right_click(data, event_button, event_time):
+    make_menu(event_button, event_time)
+
+
+def on_left_click(event):
+    with open("/tmp/openvpn.log", 'r') as fp:
+        buf = fp.read()
+    scrollbox(buf)
+
+
+if __name__ == '__main__':
+    icon = gtk.status_icon_new_from_stock(gtk.STOCK_CONNECT)
+    icon.connect('popup-menu', on_right_click)
+    icon.connect('activate', on_left_click)
+    gtk.main()
