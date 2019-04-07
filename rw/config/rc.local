@@ -1,0 +1,109 @@
+#!/bin/sh
+
+export DISPLAY=:0
+
+while ! ps aux | grep qubes-gui
+do
+	sleep 0.1
+done
+
+sleep 1
+
+# --- VPN ------------------------------------------------------------------
+
+VPN_CONFIG=($(
+	cd /rw/config/vpn/config;
+        find -type f -iname "*.ovpn" \
+	| sed 's#^\./##' \
+	| sed 's#\.ovpn$##'
+))
+
+zenity_prompt=""
+zenity_prompt="${zenity_prompt}<b>$(hostname): VPN Servers</b>\n"
+zenity_prompt="${zenity_prompt}\n"
+zenity_prompt="${zenity_prompt}Please select VPN server from the list:"
+zenity_prompt="${zenity_prompt}\n"
+zenity_prompt="${zenity_prompt}\n"
+zenity_prompt="${zenity_prompt}<i>Remark:</i>\n"
+zenity_prompt="${zenity_prompt}Empty selection amounts to a random pick.\n"
+
+VPN_SERVER=$(
+	zenity --list --text="$zenity_prompt" --hide-header --column="" \
+	       "${VPN_CONFIG[@]}"
+)
+
+if test -z $VPN_SERVER
+then
+	VPN_SERVER="$(find -type f -iname "*.ovpn" | shuf -n 1)"
+else
+	VPN_SERVER="/rw/config/vpn/config/$VPN_SERVER.ovpn"
+fi
+
+echo " :: Selected $VPN_SERVER ..."
+
+zenity_prompt=""
+zenity_prompt="${zenity_prompt}<b>$(hostname): VPN Connection</b>\n"
+zenity_prompt="${zenity_prompt}\n"
+zenity_prompt="${zenity_prompt}You will be asked for your password."
+
+# USERNAME is not set
+# If set, you will not be queried for vpn username.
+
+if test -z $USERNAME
+then
+	IFS='|'
+	CRED=($(zenity --password --username))
+	USERNAME=${CRED[0]}
+	PASSWORD=${CRED[1]}
+else
+	PASSWORD=$(zenity --password)
+fi
+
+if test -z $PASSWORD
+then
+	exit
+fi
+
+echo " :: Connecting to $VPN_SERVER ..."
+
+OVPN_CFG=$(mktemp --tmpdir=/tmp openvpn-config-XXXXX)
+OVPN_CRED=$(mktemp --tmpdir=/tmp openvpn-cred-XXXXX)
+
+echo "auth-user-pass $OVPN_CRED" > $OVPN_CFG
+
+cat <<EOF >> $OVPN_CFG
+redirect-gateway def1
+script-security 2
+up 'qubes-vpn-handler.sh up'
+down 'qubes-vpn-handler.sh down'
+verb 11
+EOF
+
+grep -v "^verb\|^auth-user-pass" $VPN_SERVER >> $OVPN_CFG
+echo "$USERNAME" >> $OVPN_CRED
+echo "$PASSWORD" >> $OVPN_CRED
+
+VPN_CLIENT="openvpn"
+VPN_OPTIONS="--cd /rw/config/vpn/ --config $OVPN_CFG --daemon --log /tmp/openvpn.log"
+
+su - -c 'notify-send "$(hostname): Starting $VPN_CLIENT..." \
+   --icon=network-idle' user
+
+groupadd -rf qvpn
+sleep 2s
+sg qvpn -c "$VPN_CLIENT $VPN_OPTIONS"
+
+cp /etc/resolv.conf{,.bak}
+cat <<EOF > /etc/resolv.conf
+nameserver 103.86.96.100
+nameserver 103.86.99.100
+EOF
+
+cat /etc/resolv.conf.bak >> /etc/resolv.conf
+
+/usr/bin/qubes-vpn-notification &
+
+{
+	sleep 60
+	rm $OVPN_CRED
+} &
