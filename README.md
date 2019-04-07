@@ -112,6 +112,14 @@ From my experince it is quite sufficient to allocate 300-350MB worth of RAM to
 the AppVM. I have found it a good habit to opt out of memory balancing to guarantee
 that resources be available and no craziness occurs with baloons and OOM.
 
+You may also set
+
+``` shell
+qvm-prefs [APP_VM] template_for_dispvms True
+```
+
+and launch a couple of instances, selecting different server configuraton for each.
+
 ## Further Development
 
 See GitHub issues.
